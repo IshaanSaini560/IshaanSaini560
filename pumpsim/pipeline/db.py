@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS frame_windows (
 );
 CREATE TABLE IF NOT EXISTS frame_creations (
     signature TEXT PRIMARY KEY, window_id INTEGER NOT NULL, slot INTEGER, tx_index INTEGER,
-    block_time INTEGER, failed INTEGER, selected INTEGER DEFAULT 0, sample_seed INTEGER
+    block_time INTEGER, failed INTEGER, selected INTEGER DEFAULT 0, sample_seed INTEGER,
+    not_creation INTEGER DEFAULT 0  -- 1 = selected, but the tx created no coin (e.g. PumpSwap CreatePool referencing the PDA)
 );
 
 -- One row per sampled launch.
@@ -93,6 +94,8 @@ def connect(path: str) -> sqlite3.Connection:
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA foreign_keys=ON")
     con.executescript(SCHEMA)
+    if "not_creation" not in {r[1] for r in con.execute("PRAGMA table_info(frame_creations)")}:
+        con.execute("ALTER TABLE frame_creations ADD COLUMN not_creation INTEGER DEFAULT 0")
     if "complete" not in {r[1] for r in con.execute("PRAGMA table_info(frame_windows)")}:
         con.execute("ALTER TABLE frame_windows ADD COLUMN complete INTEGER DEFAULT 1")
     cols = {r[1] for r in con.execute("PRAGMA table_info(trades)")}

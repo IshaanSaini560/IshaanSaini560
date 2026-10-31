@@ -97,6 +97,9 @@ def sample_launches(con: sqlite3.Connection, src: HistorySource, n: int, seed: i
         creates = [e for name, e in events_from_transaction(ft.tx) if name == "CreateEvent"]
         con.execute("UPDATE frame_creations SET selected=1, sample_seed=? WHERE signature=?", (seed, ft.ref.signature))
         if not creates:
+            # The frame address is also referenced by a few non-creation txs (seen: PumpSwap CreatePool,
+            # ~0.3 % of a 1,000 sample). Dropping them keeps the sample random among real creations.
+            con.execute("UPDATE frame_creations SET not_creation=1 WHERE signature=?", (ft.ref.signature,))
             continue
         e = creates[0]
         db.put_raw(con, ft.ref.signature, ft.tx)

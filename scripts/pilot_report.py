@@ -41,8 +41,9 @@ def main() -> None:
     ap.add_argument("--db", required=True)
     ap.add_argument("--out")
     a = ap.parse_args()
-    con = sqlite3.connect(a.db)
-    con.row_factory = sqlite3.Row
+    from pumpsim.pipeline import db as pdb
+
+    con = pdb.connect(a.db)  # applies schema migrations (e.g. the not_creation column) to older databases
     out: list[str] = []
     p = out.append
     W = con.execute("SELECT * FROM frame_windows ORDER BY t_start").fetchall()
@@ -56,8 +57,12 @@ def main() -> None:
     tot_s = sum(w["n_success"] for w in good)
     tot_f = sum(w["n_failed"] for w in good)
     mins = sum((w["t_end"] - w["t_start"]) / 60 for w in good)
-    p(f"\nUsable frame: {tot_s} creations in {mins:.0f} min ({tot_s / mins * 60:,.0f}/hour); "
-      f"failed creation transactions {wilson(tot_f, tot_s + tot_f)}.\n")
+    sel = con.execute("SELECT COUNT(*), COALESCE(SUM(not_creation), 0) FROM frame_creations WHERE selected=1").fetchone()
+    nc_share = sel[1] / sel[0] if sel[0] else 0
+    p(f"\nUsable frame: {tot_s} successful frame transactions in {mins:.0f} min ({tot_s / mins * 60:,.0f}/hour); "
+      f"failed {wilson(tot_f, tot_s + tot_f)}. Among sampled frame transactions, {sel[1]}/{sel[0]} were not coin "
+      f"creations (PumpSwap pool creations referencing the same PDA), so the creation rate is "
+      f"~{tot_s * (1 - nc_share) / mins * 60:,.0f}/hour.\n")
 
     rows = con.execute("SELECT l.*, s.data FROM launches l JOIN launch_summary s USING (mint) WHERE l.status='collected'").fetchall()
     S = [(r, json.loads(r["data"])) for r in rows]
