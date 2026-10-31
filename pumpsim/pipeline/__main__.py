@@ -34,28 +34,31 @@ def _ts(s: str) -> int:
     return int(datetime.fromisoformat(s).replace(tzinfo=timezone.utc).timestamp())
 
 
-def export(con, out: pathlib.Path) -> list[str]:
+def export(con, out: pathlib.Path, gz: bool = False) -> list[str]:
+    import gzip
+
     out.mkdir(parents=True, exist_ok=True)
     written = []
+    opener = (lambda path: gzip.open(str(path) + ".gz", "wt", newline="")) if gz else (lambda path: path.open("w", newline=""))
     for table in ("launches", "transactions", "trades", "failed_attempts", "frame_windows"):
         rows = con.execute(f"SELECT * FROM {table}").fetchall()
         path = out / f"{table}.csv"
-        with path.open("w", newline="") as f:
+        with opener(path) as f:
             w = csv.writer(f)
             if rows:
                 w.writerow(rows[0].keys())
                 w.writerows(tuple(r) for r in rows)
-        written.append(str(path))
+        written.append(str(path) + (".gz" if gz else ""))
     rows = [json.loads(r["data"]) for r in con.execute("SELECT data FROM launch_summary")]
     path = out / "launch_summary.csv"
-    with path.open("w", newline="") as f:
+    with opener(path) as f:
         if rows:
             cols = list(dict.fromkeys(k for r in rows for k in r))  # union of keys, first-seen order
             w = csv.DictWriter(f, fieldnames=cols, restval="")
             w.writeheader()
             for r in rows:
                 w.writerow({k: json.dumps(v) if isinstance(v, (list, dict)) else v for k, v in r.items()})
-    written.append(str(path))
+    written.append(str(path) + (".gz" if gz else ""))
     return written
 
 
@@ -103,6 +106,7 @@ def main() -> None:
     sub.add_parser("reprocess", help="rebuild rows from stored raw transactions (no network)")
     p = sub.add_parser("export")
     p.add_argument("--out", default=str(pathlib.Path(DEFAULT_DB).parent / "exports"))
+    p.add_argument("--gzip", action="store_true", help="write .csv.gz files")
     sub.add_parser("status")
     a = ap.parse_args()
 
@@ -114,7 +118,7 @@ def main() -> None:
         elif a.cmd == "summarize":
             print(f"summarised {summarize_all(con)} launches")
         elif a.cmd == "export":
-            print("\n".join(export(con, pathlib.Path(a.out))))
+            print("\n".join(export(con, pathlib.Path(a.out), a.gzip)))
         else:
             status(con)
         return

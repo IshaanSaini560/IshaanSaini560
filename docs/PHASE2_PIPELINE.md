@@ -173,6 +173,46 @@ Bugs the trial caught, now fixed and covered by tests:
 * Summaries of launches with no trades lacked the price-path columns, which broke the export.
   The columns are now always present.
 
+## 8b. Free pilot: 40 random launches, 1-hour horizon (2026-10-31, PublicNode)
+
+Command: `frame --random-windows 8 --days 2 --minutes 10 --seed 7 --horizon 3600`, then
+`sample --n 40 --seed 7`, then `collect --max-tx 5000`. The full report, regenerated with
+`python -m scripts.pilot_report`, is in [`generated/pilot_free.md`](generated/pilot_free.md). The
+data is in `data/pipeline/pilot_free_exports/*.csv.gz`.
+
+**This is VERIFIED on-chain data for 40 launches drawn from five 10-minute windows (30–31 Oct).
+It is a small sample with wide confidence intervals, not an estimate for Pump.fun in general.**
+
+* **Frame:** about 1,560 creations per hour in the usable windows. 12% of creation transactions
+  failed (95% CI 10–14%). 3 of the 8 random windows fell outside PublicNode's history and were
+  skipped (§7).
+* **Mix:** 28% mayhem (16–43%), 30% not SOL-paired (18–45%), 18 standard. Most non-SOL coins
+  were paired with other pump coins.
+* **Integrity:** all 2,682 replay-checked trades on standard coins matched the simulator exactly.
+* **Failures:** 82% of the 21,516 transactions touching these curves failed. 16,866 of those
+  never reached Pump: bot guard and router programs aborting on purpose. Failures are highly
+  concentrated: the 3 busiest launches account for 59% of them. The median launch's failure
+  share is 9%.
+* **Standard launches, first hour (n = 18):**
+  * 89% had at least one non-creator buyer. 50% had ≥ 5 and 28% had ≥ 20.
+  * The median peak market cap was 38.7 SOL (1.4× start). 17% reached 2× start.
+  * The median time to peak was **2 s**, and the median final/peak ratio was 0.79.
+  * One coin "graduated" at t = 0: its creator spent 86.07 SOL buying the whole curve in the
+    creation transaction. It is excluded from the creator statistics, because its trading moved
+    to PumpSwap, which is not collected yet.
+* **Creator address only (n = 17, non-graduated):**
+  * 82% sold within the hour; median first sell at 42.5 s.
+  * Creators who bought and whose position could be valued (n = 14): realised plus mark-to-curve
+    P&L had a median of +0.034 SOL. 9 of 14 were positive. The range was −0.044 to +1.41 SOL.
+  * In 1 launch the creator address's curve balance exceeded every token outstanding. At least
+    16.2 M tokens must have been transferred to other wallets. The summary now flags this instead
+    of valuing a sale the curve cannot pay for, and it is direct input for wallet clustering.
+  * These creator figures exclude any other wallets the creator controls, so they can understate
+    or overstate the true creator-side result.
+
+A truncated launch (`FYJnGwFN…`: 767 buyers, peak 393.6 SOL) hit the 5,000-transaction cap
+inside the hour. It is flagged; Helius with a higher cap is needed to see it whole.
+
 ## 9. Not yet collected (next steps)
 
 1. **Post-graduation trading.** After migration, trades happen on the PumpSwap pool (address

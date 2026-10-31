@@ -196,3 +196,27 @@ def test_windows_outside_source_history_are_skipped_not_zero(tmp_path):
     assert rows[old]["complete"] == 0 and rows[old]["n_signatures"] is None  # unknown, not "0 launches"
     assert rows[new]["complete"] == 1 and rows[new]["n_success"] == 10
     assert con.execute("SELECT COUNT(*) FROM frame_creations WHERE window_id=?", (old,)).fetchone()[0] == 0
+
+
+def test_summary_flags_tokens_transferred_off_creator_address(tmp_path):
+    """Creator buys on the curve; another wallet sells tokens it never bought on the curve (they were
+    transferred from the creator). The creator's curve-flow balance then exceeds everything outstanding,
+    so the summary must flag the transfer and refuse to value a sale the curve cannot pay for."""
+    con = db.connect(str(tmp_path / "t.sqlite"))
+    (b, x, s), st, held = _synthetic_launch(con)
+    # OTHER sells its own tokens plus 40 % of the creator's remaining balance (received by transfer)
+    amt = x.tokens + int(held * 0.4)
+    r = sell_exact_tokens_in(st, amt, VERIFIED.fee_schedule)
+    st2 = r.after
+    db.insert_row(con, "trades", {
+        "signature": "z", "seq": 0, "mint": "MINT", "slot": 13, "tx_index": 0, "order_key": 13, "block_time": 1003,
+        "user": "OTHER", "ix_name": "sell", "is_buy": 0, "quote_amount": r.quote_curve, "token_amount": amt,
+        "fee": r.protocol_fee, "creator_fee": r.creator_fee, "buyback_fee": 0, "fee_bps": 95, "creator_fee_bps": 30,
+        "v_quote": st2.virtual_quote_reserves, "v_token": st2.virtual_token_reserves,
+        "r_quote": st2.real_quote_reserves, "r_token": st2.real_token_reserves, "mayhem": 0})
+    con.commit()
+    out = summarize_launch(con, "MINT")
+    outstanding = 793_100_000_000_000 - st2.real_token_reserves
+    assert out["creator_tokens_moved_off_min"] == held - outstanding > 0
+    assert out["creator_remaining_mark_to_curve_value"] is None
+    assert "transferred out" in out["creator_mark_to_curve_unavailable_reason"]

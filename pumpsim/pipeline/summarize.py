@@ -119,16 +119,28 @@ def summarize_launch(con: sqlite3.Connection, mint: str) -> dict:
         "creator_realised_pnl_avg_cost": realised, "creator_remaining_cost_basis": cost,
         "creator_fee_accrued": 0 if L["is_holder_reward"] else sum(t["creator_fee"] for t in trades),
     })
-    liq = None
-    if held > 0 and trades and L["is_sol_quote"] and not L["is_mayhem"] and not L["complete_time"]:
+    liq, reason, moved_min = None, None, 0
+    outstanding = L["init_real_token"] - trades[-1]["r_token"] if trades else 0  # tokens held by anyone, curve view
+    if held > outstanding:
+        # The creator address cannot hold more than everyone together: the excess left this address by
+        # plain token transfer (and was likely sold from other wallets). Evidence for wallet clustering.
+        moved_min = held - outstanding
+        reason = "creator curve-flow balance exceeds all tokens outstanding: tokens were transferred out"
+    elif held > 0 and L["complete_time"]:
+        reason = "curve completed; position now trades on PumpSwap (not collected)"
+    elif held > 0 and (L["is_mayhem"] or not L["is_sol_quote"]):
+        reason = "mayhem / non-SOL curve not modelled by the simulator"
+    elif held > 0 and trades:
         last = trades[-1]
         st = CurveState(last["v_token"], last["v_quote"], last["r_token"], last["r_quote"], supply)
         try:
             liq = sell_exact_tokens_in(st, held, FeeSchedule.flat(last["fee_bps"], last["creator_fee_bps"])).user_quote_delta
-        except Exception:
-            liq = None
+        except Exception as e:  # report, do not hide
+            reason = f"simulator refused: {e}"
+    s["creator_tokens_moved_off_min"] = moved_min
     s["creator_remaining_mark_to_curve_value"] = liq
     s["creator_unrealised_pnl_mark_to_curve"] = None if liq is None else liq - cost
+    s["creator_mark_to_curve_unavailable_reason"] = reason
 
     # --- costs and failures
     s["protocol_fees"] = sum(t["fee"] for t in trades)
