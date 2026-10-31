@@ -64,7 +64,10 @@ def summarize_launch(con: sqlite3.Connection, mint: str) -> dict:
         s[f"noncreator_buy_quote_{tag}"] = sum(t["quote_amount"] for t in sel if t["is_buy"])
         s[f"noncreator_sell_quote_{tag}"] = sum(t["quote_amount"] for t in sel if not t["is_buy"])
 
-    # --- price path
+    # --- price path (keys always present so every summary has the same columns)
+    for k in ("start_mcap", "max_mcap", "time_to_max_mcap_s", "final_mcap", "final_over_max", "max_progress",
+              "final_progress", "last_trade_s"):
+        s[k] = None
     if trades:
         mc = [(_mcap(t["v_quote"], t["v_token"], supply), t["block_time"] - t0) for t in trades]
         peak = max(mc, key=lambda x: x[0])

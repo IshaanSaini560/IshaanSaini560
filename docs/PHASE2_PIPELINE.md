@@ -1,7 +1,8 @@
 # Phase 2: historical launch-data pipeline
 
-Status: **built and trial-tested on the public RPC. Large-scale collection is waiting for a
-Helius API key** (environment variable `HELIUS_API_KEY`).
+Status: **built and trial-tested with free, keyless sources (PublicNode, public mainnet RPC).
+Collection beyond the last ~3 days, and at the 500–1,000-launch scale, is waiting for a Helius
+API key** (environment variable `HELIUS_API_KEY`).
 
 The pipeline is read-only. It never holds keys, signs, or sends transactions. All stored chain
 data is decoded from mainnet transactions (VERIFIED). Derived columns are labelled as such.
@@ -99,13 +100,15 @@ python -m pumpsim.pipeline frame   --random-windows 24 --days 14 --minutes 10 --
 python -m pumpsim.pipeline sample  --n 1000 --seed 1 --horizon 21600
 python -m pumpsim.pipeline collect --limit 1000 --max-credits 200000
 python -m pumpsim.pipeline summarize
+python -m pumpsim.pipeline reprocess                                  # rebuild rows from stored raw txs (no network)
 python -m pumpsim.pipeline export  --out data/pipeline/exports       # CSV per table
 python -m pumpsim.pipeline status
 ```
 
 `--source helius` (default) uses `getTransactionsForAddress`. `--source helius-rpc` uses
-standard methods on the Helius URL, for plans without that method. `--source public` uses the
-public endpoint, for small trials only. Collection is resumable: re-running `collect` picks up
+standard methods on the Helius URL, for plans without that method. `--source publicnode` is
+free and keyless but only reaches ~3 days back (§7). `--source public` uses the public mainnet
+endpoint, for spot checks only. Collection is resumable: re-running `collect` picks up
 pending and errored launches.
 
 ## 6. Cost estimate (Helius price list, checked 2026-10-31)
@@ -120,9 +123,46 @@ The Free plan lists 1M credits a month. Helius does not say which plans include
 `getTransactionsForAddress`. If the call is refused, use `--source helius-rpc` (1 credit per
 transaction, so roughly 10× more credits and slower).
 
-## 7. Trial run on the public RPC (2026-10-31)
+## 7. Free data sources (no API key)
 
-See §8 below; the trial results are appended after the run.
+| Source | Measured 2026-10-31 | Use |
+|---|---|---|
+| `--source publicnode` (`solana-rpc.publicnode.com`) | ~40 requests/s burst without errors. Returns `transactionIndex` on standard methods, so intra-slot ordering is exact. **Only ~3.2 days of ledger** (first available slot 463,030,418). It rejects Python's default User-Agent, so the client sends its own. | Free pilots on launches from the last ~3 days |
+| `--source public` (`api.mainnet-beta.solana.com`) | Per-method limit of about 10 calls per window (`x-ratelimit-method-limit: 10`); 429 penalties of 10 s. Paced at ~1 request/s. | Spot checks only |
+| dRPC free plan | Solana is not available on the free plan | — |
+
+The pipeline is paced at ≤ 10 requests/s with 4 workers on PublicNode, to be a polite user of a
+free service. Anything older than ~3 days, and anything at the 500–1,000-launch scale, needs
+Helius (or another archival provider).
+
+## 8. Trial run (2026-10-31, PublicNode, 25 seconds)
+
+Settings: one creation window (13:35–13:38 UTC), seed 42, 6 launches, 15-minute horizon.
+All figures are VERIFIED on-chain data for these six coins only. They are **not** statistics
+about Pump.fun launches in general.
+
+* **Frame and sample:** 75 creation transactions in the window, 5 of them failed. Re-running with
+  the same seed selected the same 6 mints.
+* **Mix:** 3 standard SOL-paired coins, 1 mayhem coin and 2 non-SOL-quoted coins.
+* **Data:** 222 curve transactions (40 failed), 237 trades.
+* **Integrity:** **208 of 208** replay-checked trades on the standard coins matched the
+  simulator exactly. The rest (mayhem and non-SOL) are excluded from the check by design.
+* **Failures (40 transactions):** only 11 were Pump's own errors (10 `NotEnoughTokensToSell` in
+  batch-sell transactions, 1 `TooLittleSolReceived`). The rest failed in a trading terminal's
+  program (`term9…`: 23), the GMGN router's own slippage check (4) or the System program (2).
+  Treating every failed transaction as a slippage failure would be wrong.
+* **Example launch ("Momo"):** the creator paid 0.738 SOL and received 2.786 SOL. The first
+  sell came at 9 s; the market cap peaked at 116 SOL at 8 s and was back to the 28 SOL start
+  within the 15-minute horizon. 71 non-creator wallets bought.
+
+Bugs the trial caught, now fixed and covered by tests:
+
+* `TradeEvent.ix_name` uses its own labels (`buy_exact_quote_in` for `buy_exact_sol_in`).
+  The replay must use the decoded instruction name. Both are stored now.
+* Bots set slippage limits of u64::MAX ("no limit"), which overflows SQLite's signed 64-bit
+  integers. Those columns are now untyped, so the value is stored exactly.
+* Summaries of launches with no trades lacked the price-path columns, which broke the export.
+  The columns are now always present.
 
 ## 9. Not yet collected (next steps)
 

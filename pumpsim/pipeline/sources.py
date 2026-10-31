@@ -75,49 +75,55 @@ class HistorySource:
 class RpcSource(HistorySource):
     name = "rpc"
 
-    def __init__(self, url: str = DEFAULT_RPC, min_interval: float = 0.35, credits_per_call: float = 1.0):
+    def __init__(self, url: str = DEFAULT_RPC, min_interval: float = 0.35, credits_per_call: float = 1.0,
+                 workers: int = 1):
         super().__init__()
         self.rpc = Rpc(url, min_interval=min_interval)
         self.credits_per_call = credits_per_call
+        self.workers = workers
+        self._sig_cache: dict[str, dict] = {}  # address -> {"items": newest-first, "before": cursor, "done": bool}
 
     def _sig_page(self, address: str, before: str | None) -> list[dict]:
         self.usage.add("getSignaturesForAddress", self.credits_per_call)
         return self.rpc.signatures(address, limit=1000, before=before)
 
     def signatures(self, address: str, t_start: int, t_end: int) -> list[SigRef]:
-        newest_first: list[dict] = []
-        before = None
-        while True:
-            page = self._sig_page(address, before)
-            if not page:
-                break
-            for s in page:
-                bt = s.get("blockTime")
-                if bt is None:
-                    continue
-                if bt < t_start:
-                    break
-                if bt < t_end:
-                    newest_first.append(s)
+        """Signatures with t_start <= blockTime < t_end, oldest first. Pages are cached per address,
+        so enumerating several windows on the same address walks its history only once."""
+        c = self._sig_cache.setdefault(address, {"items": [], "before": None, "done": False})
+        while not c["done"] and (not c["items"] or (c["items"][-1].get("blockTime") or 0) >= t_start):
+            page = self._sig_page(address, c["before"])
+            c["items"] += page
+            if len(page) < 1000:
+                c["done"] = True
             else:
-                before = page[-1]["signature"]
-                if len(page) < 1000:
-                    break
-                continue
-            break
+                c["before"] = page[-1]["signature"]
+        sel = [s for s in c["items"] if s.get("blockTime") is not None and t_start <= s["blockTime"] < t_end]
         out = []
-        for i, s in enumerate(reversed(newest_first)):
-            out.append(SigRef(s["signature"], s["slot"], s.get("blockTime"), s.get("err") is not None, None, i))
+        for i, s in enumerate(reversed(sel)):
+            # Some RPCs (e.g. PublicNode) also return the in-block transactionIndex: exact ordering.
+            out.append(SigRef(s["signature"], s["slot"], s.get("blockTime"), s.get("err") is not None,
+                              s.get("transactionIndex"), i))
         return out
 
     def transactions(self, refs: list[SigRef]) -> list[FullTx]:
-        out = []
-        for r in refs:
+        """Fetch full transactions, preserving input order; `workers` > 1 fetches in parallel
+        (still paced by the shared min_interval)."""
+        def one(r: SigRef):
             self.usage.add("getTransaction", self.credits_per_call)
             tx = self.rpc.transaction(r.signature)
-            if tx is not None:
-                out.append(FullTx(r, tx))
-        return out
+            if tx is None:
+                raise RpcError(f"transaction {r.signature} not available from this RPC (pruned history?)")
+            if r.tx_index is None and tx.get("transactionIndex") is not None:
+                r.tx_index = tx["transactionIndex"]
+            return FullTx(r, tx)
+
+        if self.workers <= 1:
+            return [one(r) for r in refs]
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(self.workers) as ex:
+            return list(ex.map(one, refs))
 
     def full_history(self, address: str, t_start: int, t_end: int, max_tx: int) -> tuple[list[FullTx], bool]:
         refs = self.signatures(address, t_start, t_end)
@@ -201,7 +207,8 @@ class HeliusSource(HistorySource):
 
 def make_source(kind: str) -> HistorySource:
     """kind: "helius" (getTransactionsForAddress), "helius-rpc" (standard methods on the Helius URL),
-    or "public" (SOLANA_RPC_URL or the public mainnet endpoint)."""
+    "publicnode" (free PublicNode endpoint, ~3 days of history), or "public" (SOLANA_RPC_URL or the
+    public mainnet endpoint, ~1 request/s)."""
     if kind == "helius":
         return HeliusSource()
     if kind == "helius-rpc":
@@ -210,6 +217,12 @@ def make_source(kind: str) -> HistorySource:
             raise RpcError("HELIUS_API_KEY is not set")
         src = RpcSource(f"{HELIUS_URL}?api-key={key}", min_interval=0.1)
         src.name = "helius-rpc"
+        return src
+    if kind == "publicnode":
+        # Free, keyless (Allnodes PublicNode). Measured 2026-10-31: ~40 req/s burst without errors,
+        # but only ~3.2 days of ledger history. Paced politely at <= 10 req/s with 4 workers.
+        src = RpcSource("https://solana-rpc.publicnode.com", min_interval=0.1, credits_per_call=0, workers=4)
+        src.name = "publicnode"
         return src
     if kind == "public":
         # Public mainnet RPC: ~10 calls per method per window (x-ratelimit-method-limit, 2026-10-31).

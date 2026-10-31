@@ -153,3 +153,23 @@ def test_u64_max_limit_is_stored_exactly(tmp_path):
     db.insert_row(con, "failed_attempts", {"signature": "s", "seq": 0, "mint": "m", "arg_limit": 2**64 - 1})
     v = con.execute("SELECT arg_limit FROM failed_attempts").fetchone()[0]
     assert int(v) == 2**64 - 1
+
+
+def test_rpc_source_signature_cache_and_order():
+    from pumpsim.pipeline.sources import RpcSource
+    src = RpcSource("http://unused")
+    # newest-first pages, as getSignaturesForAddress returns them; 1000-item page then a short page
+    page1 = [{"signature": f"s{i}", "slot": 5000 - i, "blockTime": 5000 - i, "err": None, "transactionIndex": i % 7}
+             for i in range(1000)]
+    page2 = [{"signature": f"s{i}", "slot": 5000 - i, "blockTime": 5000 - i, "err": {"x": 1}} for i in range(1000, 1500)]
+    pages = iter([page1, page2])
+    calls = []
+    src._sig_page = lambda address, before: calls.append(before) or next(pages)
+    a = src.signatures("addr", 4500, 4600)
+    assert [r.block_time for r in a] == list(range(4500, 4600))  # oldest first, half-open window
+    assert a[0].tx_index == 500 % 7
+    b = src.signatures("addr", 3600, 3700)  # needs the second page
+    assert len(b) == 100 and all(r.failed for r in b)
+    c = src.signatures("addr", 4500, 4600)  # served from cache
+    assert [r.signature for r in c] == [r.signature for r in a]
+    assert calls == [None, "s999"]

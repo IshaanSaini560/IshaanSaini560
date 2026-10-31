@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -22,16 +23,21 @@ class Rpc:
         self.retries = retries
         self._last = 0.0
         self._id = 0
+        self._lock = threading.Lock()  # pacing is shared across worker threads
 
     def call(self, method: str, params: list):
         for attempt in range(self.retries):
-            wait = self.min_interval - (time.monotonic() - self._last)
-            if wait > 0:
-                time.sleep(wait)
-            self._last = time.monotonic()
-            self._id += 1
-            body = json.dumps({"jsonrpc": "2.0", "id": self._id, "method": method, "params": params}).encode()
-            req = urllib.request.Request(self.url, data=body, headers={"Content-Type": "application/json"})
+            with self._lock:
+                wait = self.min_interval - (time.monotonic() - self._last)
+                if wait > 0:
+                    time.sleep(wait)
+                self._last = time.monotonic()
+                self._id += 1
+                req_id = self._id
+            body = json.dumps({"jsonrpc": "2.0", "id": req_id, "method": method, "params": params}).encode()
+            # Some providers (e.g. PublicNode) reject Python's default User-Agent with 403.
+            req = urllib.request.Request(self.url, data=body, headers={
+                "Content-Type": "application/json", "User-Agent": "pumpsim-research/0.2 (read-only)"})
             try:
                 with urllib.request.urlopen(req, timeout=30) as resp:
                     out = json.loads(resp.read())

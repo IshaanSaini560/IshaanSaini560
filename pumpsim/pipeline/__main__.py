@@ -10,7 +10,8 @@
   python -m pumpsim.pipeline status
 
 Sources (--source): helius (default; needs HELIUS_API_KEY, uses getTransactionsForAddress),
-helius-rpc (standard methods on the Helius URL), public (SOLANA_RPC_URL or public mainnet; trials only).
+helius-rpc (standard methods on the Helius URL), publicnode (free, keyless, ~3 days of history),
+public (SOLANA_RPC_URL or public mainnet; ~1 request/s, trials only).
 """
 from __future__ import annotations
 
@@ -49,8 +50,8 @@ def export(con, out: pathlib.Path) -> list[str]:
     path = out / "launch_summary.csv"
     with path.open("w", newline="") as f:
         if rows:
-            cols = list(rows[0].keys())
-            w = csv.DictWriter(f, fieldnames=cols)
+            cols = list(dict.fromkeys(k for r in rows for k in r))  # union of keys, first-seen order
+            w = csv.DictWriter(f, fieldnames=cols, restval="")
             w.writeheader()
             for r in rows:
                 w.writerow({k: json.dumps(v) if isinstance(v, (list, dict)) else v for k, v in r.items()})
@@ -78,7 +79,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(prog="pumpsim.pipeline", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--db", default=DEFAULT_DB)
-    ap.add_argument("--source", default="helius", choices=["helius", "helius-rpc", "public"])
+    ap.add_argument("--source", default="helius", choices=["helius", "helius-rpc", "publicnode", "public"])
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("frame")
     p.add_argument("--start")
