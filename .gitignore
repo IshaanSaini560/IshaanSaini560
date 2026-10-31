@@ -4,3 +4,5 @@ __pycache__/
 .venv/
 data/pipeline/*.sqlite
 data/pipeline/*.sqlite-*
+data/pipeline/helius_1000_exports/transactions.csv.gz
+data/pipeline/helius_1000_exports/failed_attempts.csv.gz

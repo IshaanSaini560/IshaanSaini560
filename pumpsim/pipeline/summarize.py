@@ -87,6 +87,7 @@ def summarize_launch(con: sqlite3.Connection, mint: str) -> dict:
     paid = received = sold_tokens = bought_tokens = 0
     realised = 0
     max_held = 0
+    sold_not_bought = proceeds_not_bought = 0
     first_sell = first_substantial = None
     for t in trades:
         if t["user"] not in creators:
@@ -101,15 +102,20 @@ def summarize_launch(con: sqlite3.Connection, mint: str) -> dict:
         else:
             r = t["quote_amount"] - t["fee"] - t["creator_fee"]
             received += r
-            amt = min(t["token_amount"], held) if held else t["token_amount"]
-            basis = cost * amt // held if held else 0
-            realised += r - basis
+            # Only tokens this address bought on the curve have a known cost. Tokens it sells beyond
+            # that arrived by transfer (e.g. from a related wallet): reported separately, never as profit.
+            from_curve = min(t["token_amount"], held)
+            proceeds_curve = r * from_curve // t["token_amount"] if t["token_amount"] else 0
+            sold_not_bought += t["token_amount"] - from_curve
+            proceeds_not_bought += r - proceeds_curve
+            basis = cost * from_curve // held if held else 0
+            realised += proceeds_curve - basis
             if first_sell is None:
                 first_sell = t["block_time"] - t0
             if first_substantial is None and held and t["token_amount"] >= 0.10 * held:
                 first_substantial = t["block_time"] - t0
             cost -= basis
-            held -= amt
+            held -= from_curve
             sold_tokens += t["token_amount"]
     s.update({
         "creator_quote_paid": paid, "creator_quote_received": received, "creator_net_cash": received - paid,
@@ -118,6 +124,8 @@ def summarize_launch(con: sqlite3.Connection, mint: str) -> dict:
         "creator_first_sell_s": first_sell, "creator_first_substantial_sell_s": first_substantial,
         "creator_realised_pnl_avg_cost": realised, "creator_remaining_cost_basis": cost,
         "creator_fee_accrued": 0 if L["is_holder_reward"] else sum(t["creator_fee"] for t in trades),
+        "creator_tokens_sold_not_bought_on_curve": sold_not_bought,
+        "creator_proceeds_from_tokens_not_bought_on_curve": proceeds_not_bought,
     })
     liq, reason, moved_min = None, None, 0
     outstanding = L["init_real_token"] - trades[-1]["r_token"] if trades else 0  # tokens held by anyone, curve view

@@ -138,6 +138,7 @@ def _replay(con: sqlite3.Connection, launch: sqlite3.Row) -> tuple[int, int]:
     for t in rows:
         sched = FeeSchedule.flat(t["fee_bps"], t["creator_fee_bps"])
         r = None
+        not_modelled = False
         try:
             if t["arg_amount"] is not None and t["ix_name"] in EXACT_OUT:
                 r = buy_exact_tokens_out(st, t["arg_amount"], sched)
@@ -145,16 +146,22 @@ def _replay(con: sqlite3.Connection, launch: sqlite3.Row) -> tuple[int, int]:
                 r = buy_exact_quote_in(st, t["arg_amount"], sched)
             elif t["arg_amount"] is not None and t["ix_name"] in SELLS:
                 r = sell_exact_tokens_in(st, t["arg_amount"], sched)
+        except NotImplementedError:
+            # e.g. a v3 buy that crosses graduation into the pool-to-be ("synthetic migration"):
+            # outside the simulator's scope, so it is recorded as not checked, not as a mismatch.
+            not_modelled = True
         except Exception:
             r = None
-        known = t["arg_amount"] is not None and t["ix_name"] in EXACT_OUT | EXACT_IN | SELLS
+        known = t["arg_amount"] is not None and t["ix_name"] in EXACT_OUT | EXACT_IN | SELLS and not not_modelled
+        if not_modelled:
+            con.execute("UPDATE trades SET sim_match=NULL WHERE mint=? AND signature=? AND seq=?", (t["mint"], t["signature"], t["seq"]))
         if known:
             ok = r is not None and (r.tokens, r.quote_curve, r.protocol_fee, r.creator_fee,
                                     r.after.virtual_quote_reserves, r.after.virtual_token_reserves) == (
                 t["token_amount"], t["quote_amount"], t["fee"], t["creator_fee"], t["v_quote"], t["v_token"])
             checked += 1
             matched += ok
-            con.execute("UPDATE trades SET sim_match=? WHERE signature=? AND seq=?", (int(ok), t["signature"], t["seq"]))
+            con.execute("UPDATE trades SET sim_match=? WHERE mint=? AND signature=? AND seq=?", (int(ok), t["mint"], t["signature"], t["seq"]))
         st = CurveState(t["v_token"], t["v_quote"], t["r_token"], t["r_quote"], launch["token_total_supply"])
     return checked, matched
 
@@ -250,3 +257,14 @@ def collect_pending(con: sqlite3.Connection, src: HistorySource, limit: int, max
             progress(f"error {launch['mint']}: {e!r}")
     log_usage(con, "collect", src, f"done={done}")
     return done
+
+
+def rereplay(con: sqlite3.Connection) -> tuple[int, int]:
+    """Re-run the simulator check for every collected launch from the stored trades (no network)."""
+    tot_c = tot_m = 0
+    for launch in con.execute("SELECT * FROM launches WHERE status='collected'").fetchall():
+        c, m = _replay(con, launch)
+        con.execute("UPDATE launches SET sim_checked=?, sim_matched=? WHERE mint=?", (c, m, launch["mint"]))
+        tot_c, tot_m = tot_c + c, tot_m + m
+    con.commit()
+    return tot_c, tot_m

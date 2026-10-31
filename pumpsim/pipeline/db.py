@@ -10,7 +10,7 @@ import json
 import sqlite3
 import zlib
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -47,12 +47,15 @@ CREATE TABLE IF NOT EXISTS launches (
 );
 
 -- Every transaction touching the bonding curve inside the observation horizon.
+-- One transaction can touch several sampled launches (multi-coin bot transactions), so every
+-- per-launch table is keyed by (mint, signature[, seq]), never by signature alone.
 CREATE TABLE IF NOT EXISTS transactions (
-    signature TEXT PRIMARY KEY, mint TEXT NOT NULL, slot INTEGER, tx_index INTEGER, order_key INTEGER,
+    signature TEXT NOT NULL, mint TEXT NOT NULL, slot INTEGER, tx_index INTEGER, order_key INTEGER,
     block_time INTEGER, failed INTEGER, err TEXT,
     fail_program TEXT, fail_name TEXT, pump_reached INTEGER,
     fee INTEGER, n_signatures INTEGER, cu_consumed INTEGER, fee_payer TEXT, signers TEXT,
-    jito_tip INTEGER, payer_sol_delta INTEGER, version TEXT, pump_ix TEXT
+    jito_tip INTEGER, payer_sol_delta INTEGER, version TEXT, pump_ix TEXT,
+    PRIMARY KEY (mint, signature)
 );
 CREATE INDEX IF NOT EXISTS tx_mint ON transactions (mint, slot, order_key);
 
@@ -64,7 +67,7 @@ CREATE TABLE IF NOT EXISTS trades (
     fee_bps INTEGER, creator_fee_bps INTEGER,
     v_quote INTEGER, v_token INTEGER, r_quote INTEGER, r_token INTEGER,
     arg_amount, arg_limit, mayhem INTEGER, sim_match INTEGER,   -- untyped: u64 args may exceed i64
-    PRIMARY KEY (signature, seq)
+    PRIMARY KEY (mint, signature, seq)
 );
 CREATE INDEX IF NOT EXISTS trades_mint ON trades (mint, slot, order_key, seq);
 CREATE INDEX IF NOT EXISTS trades_user ON trades (user);
@@ -73,7 +76,7 @@ CREATE INDEX IF NOT EXISTS trades_user ON trades (user);
 CREATE TABLE IF NOT EXISTS failed_attempts (
     signature TEXT, seq INTEGER, mint TEXT, slot INTEGER, block_time INTEGER, fee_payer TEXT,
     ix_name TEXT, arg_amount, arg_limit, fail_program TEXT, fail_name TEXT, fee_paid INTEGER,  -- args untyped
-    PRIMARY KEY (signature, seq)
+    PRIMARY KEY (mint, signature, seq)
 );
 
 -- Raw transactions (zlib JSON) so analyses can be re-run without paying for the data again.
@@ -88,11 +91,36 @@ CREATE TABLE IF NOT EXISTS usage_log (
 """
 
 
+def _pk(con: sqlite3.Connection, table: str) -> list[str]:
+    cols = sorted((r[5], r[1]) for r in con.execute(f"PRAGMA table_info({table})") if r[5])
+    return [c for _, c in cols]
+
+
+def _rekey(con: sqlite3.Connection) -> None:
+    """Schema v2 -> v3: rebuild per-launch tables keyed by mint as well. Under v2, a transaction
+    shared by two sampled launches kept only the last launch's rows; affected launches must be
+    re-collected (find them with launches.n_tx != row count)."""
+    import re
+
+    for table in ("transactions", "trades", "failed_attempts"):
+        exists = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()
+        if not exists or "mint" in _pk(con, table):
+            continue
+        ddl = re.search(rf"CREATE TABLE IF NOT EXISTS {table} \(.*?\n\);", SCHEMA, re.S).group(0)
+        con.execute(f"ALTER TABLE {table} RENAME TO {table}_v2")
+        con.execute(ddl)
+        cols = ", ".join(r[1] for r in con.execute(f"PRAGMA table_info({table}_v2)"))
+        con.execute(f"INSERT OR IGNORE INTO {table} ({cols}) SELECT {cols} FROM {table}_v2")
+        con.execute(f"DROP TABLE {table}_v2")
+    con.commit()
+
+
 def connect(path: str) -> sqlite3.Connection:
     con = sqlite3.connect(path)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA foreign_keys=ON")
+    _rekey(con)
     con.executescript(SCHEMA)
     if "not_creation" not in {r[1] for r in con.execute("PRAGMA table_info(frame_creations)")}:
         con.execute("ALTER TABLE frame_creations ADD COLUMN not_creation INTEGER DEFAULT 0")

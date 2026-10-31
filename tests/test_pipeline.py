@@ -220,3 +220,53 @@ def test_summary_flags_tokens_transferred_off_creator_address(tmp_path):
     assert out["creator_tokens_moved_off_min"] == held - outstanding > 0
     assert out["creator_remaining_mark_to_curve_value"] is None
     assert "transferred out" in out["creator_mark_to_curve_unavailable_reason"]
+
+
+def test_transaction_shared_by_two_launches_keeps_both(tmp_path):
+    """Multi-coin bot transactions touch several sampled launches; each must keep its own rows."""
+    con = db.connect(str(tmp_path / "t.sqlite"))
+    for mint in ("MINT_A", "MINT_B"):
+        db.insert_row(con, "transactions", {"signature": "shared", "mint": mint, "failed": 0})
+        db.insert_row(con, "trades", {"signature": "shared", "seq": 0, "mint": mint, "token_amount": 1})
+    con.commit()
+    assert con.execute("SELECT COUNT(*) FROM transactions WHERE signature='shared'").fetchone()[0] == 2
+    assert {r[0] for r in con.execute("SELECT mint FROM trades WHERE signature='shared'")} == {"MINT_A", "MINT_B"}
+
+
+def test_v2_database_is_rekeyed(tmp_path):
+    import sqlite3
+    path = str(tmp_path / "old.sqlite")
+    old = sqlite3.connect(path)
+    old.execute("CREATE TABLE transactions (signature TEXT PRIMARY KEY, mint TEXT NOT NULL, failed INTEGER)")
+    old.execute("INSERT INTO transactions VALUES ('s1', 'M', 0)")
+    old.commit(); old.close()
+    con = db.connect(path)
+    assert db._pk(con, "transactions") == ["signature", "mint"] or set(db._pk(con, "transactions")) == {"mint", "signature"}
+    assert con.execute("SELECT COUNT(*) FROM transactions").fetchone()[0] == 1
+    db.insert_row(con, "transactions", {"signature": "s1", "mint": "OTHER", "failed": 0})
+    assert con.execute("SELECT COUNT(*) FROM transactions").fetchone()[0] == 2
+
+
+def test_creator_selling_transferred_in_tokens_is_not_profit(tmp_path):
+    """A creator address that sells more than it bought on the curve (extra tokens arrived by
+    transfer) must not book those proceeds as zero-cost realised profit."""
+    con = db.connect(str(tmp_path / "t.sqlite"))
+    (b, x, s), st, held = _synthetic_launch(con)
+    extra = 5_000_000_000_000  # 5M tokens the creator never bought on the curve
+    amt = held + extra
+    r = sell_exact_tokens_in(st, amt, VERIFIED.fee_schedule)
+    st2 = r.after
+    db.insert_row(con, "trades", {
+        "signature": "w", "seq": 0, "mint": "MINT", "slot": 14, "tx_index": 0, "order_key": 14, "block_time": 1004,
+        "user": "CREATOR", "ix_name": "sell", "is_buy": 0, "quote_amount": r.quote_curve, "token_amount": amt,
+        "fee": r.protocol_fee, "creator_fee": r.creator_fee, "buyback_fee": 0, "fee_bps": 95, "creator_fee_bps": 30,
+        "v_quote": st2.virtual_quote_reserves, "v_token": st2.virtual_token_reserves,
+        "r_quote": st2.real_quote_reserves, "r_token": st2.real_token_reserves, "mayhem": 0})
+    con.commit()
+    out = summarize_launch(con, "MINT")
+    assert out["creator_tokens_sold_not_bought_on_curve"] == extra
+    proceeds_curve = r.user_quote_delta * held // amt
+    assert out["creator_proceeds_from_tokens_not_bought_on_curve"] == r.user_quote_delta - proceeds_curve
+    assert out["creator_curve_net_tokens"] == 0
+    # realised P&L only covers curve-bought tokens: total cost basis was the buy, all of it now sold
+    assert out["creator_realised_pnl_avg_cost"] == s.user_quote_delta + proceeds_curve - (-b.user_quote_delta)

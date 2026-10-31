@@ -23,7 +23,7 @@ import pathlib
 from datetime import datetime, timezone
 
 from . import db
-from .collect import collect_pending, enumerate_frame, log_usage, random_windows, reprocess, sample_launches
+from .collect import collect_pending, enumerate_frame, log_usage, random_windows, reprocess, rereplay, sample_launches
 from .sources import make_source
 from .summarize import summarize_all
 
@@ -40,7 +40,7 @@ def export(con, out: pathlib.Path, gz: bool = False) -> list[str]:
     out.mkdir(parents=True, exist_ok=True)
     written = []
     opener = (lambda path: gzip.open(str(path) + ".gz", "wt", newline="")) if gz else (lambda path: path.open("w", newline=""))
-    for table in ("launches", "transactions", "trades", "failed_attempts", "frame_windows"):
+    for table in ("launches", "transactions", "trades", "failed_attempts", "frame_windows", "frame_creations"):
         rows = con.execute(f"SELECT * FROM {table}").fetchall()
         path = out / f"{table}.csv"
         with opener(path) as f:
@@ -104,6 +104,7 @@ def main() -> None:
     p.add_argument("--no-raw", action="store_true", help="do not keep raw transactions")
     sub.add_parser("summarize")
     sub.add_parser("reprocess", help="rebuild rows from stored raw transactions (no network)")
+    sub.add_parser("replay", help="re-run the simulator integrity check from stored trades (no network)")
     p = sub.add_parser("export")
     p.add_argument("--out", default=str(pathlib.Path(DEFAULT_DB).parent / "exports"))
     p.add_argument("--gzip", action="store_true", help="write .csv.gz files")
@@ -112,8 +113,11 @@ def main() -> None:
 
     pathlib.Path(a.db).parent.mkdir(parents=True, exist_ok=True)
     con = db.connect(a.db)
-    if a.cmd in ("summarize", "export", "status", "reprocess"):
-        if a.cmd == "reprocess":
+    if a.cmd in ("summarize", "export", "status", "reprocess", "replay"):
+        if a.cmd == "replay":
+            c, m = rereplay(con)
+            print(f"simulator check: {m}/{c} modelled trades exact")
+        elif a.cmd == "reprocess":
             print(f"reprocessed {reprocess(con)} launches")
         elif a.cmd == "summarize":
             print(f"summarised {summarize_all(con)} launches")

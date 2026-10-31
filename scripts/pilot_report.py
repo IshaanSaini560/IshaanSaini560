@@ -71,14 +71,18 @@ def main() -> None:
     p("## Sample composition\n")
     p(f"- Launches: {n} (simple random sample, seed recorded in frame_creations)")
     p(f"- Mayhem mode: {wilson(sum(r['is_mayhem'] for r, _ in S), n)}")
-    p(f"- Not SOL-quoted: {wilson(sum(not r['is_sol_quote'] for r, _ in S), n)} "
-      f"(quote mints: {dict(Counter(r['quote_mint'][:6] for r, _ in S if not r['is_sol_quote']))})")
+    qm = Counter(r["quote_mint"] for r, _ in S if not r["is_sol_quote"])
+    named = {"pumpCmXqMfrsAkQ5r49WcJnRayYRqmXz6ae8H7H9Dfn": "PUMP", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": "USDC"}
+    top = ", ".join(f"{named.get(k, k[:6] + '…')} {v}" for k, v in qm.most_common(5))
+    p(f"- Not SOL-quoted: {wilson(sum(not r['is_sol_quote'] for r, _ in S), n)}; top quote mints: {top}; "
+      f"{len(qm)} distinct quote mints in total")
     p(f"- Standard (SOL-paired, non-mayhem): {len(std)}")
     p(f"- Truncated at max-tx: {sum(r['truncated'] for r, _ in S)}")
     tr = con.execute("SELECT COUNT(*), SUM(sim_match) FROM trades WHERE sim_match IS NOT NULL").fetchone()
     p(f"- Simulator replay on standard coins: {tr[1]}/{tr[0]} trades exact\n")
 
-    p("## Transactions touching the curve (all 40 launches)\n")
+    p(f"## Transactions touching the curve (all {n} launches)\n")
+    p("Counted per launch: a multi-coin transaction touching k sampled launches counts k times.\n")
     tx = con.execute("SELECT COUNT(*), SUM(failed), SUM(failed AND pump_reached=0), "
                      "SUM(failed AND fail_program='6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P') FROM transactions").fetchone()
     p(f"- {tx[0]:,} transactions; failed {wilson(tx[1], tx[0])}")
@@ -107,7 +111,15 @@ def main() -> None:
         p(f"- Peak ≥ 2× start (≥ 55.9 SOL): {wilson(sum((d['max_mcap'] or 0) >= 2 * d['start_mcap'] for _, d in std if d['start_mcap']), m)}")
         p(f"- Completed the curve (graduated) within horizon: {wilson(sum(d['completed'] for _, d in std), m)}")
         p(f"- Final / peak market cap: {q([d['final_over_max'] for _, d in std])}")
-        p(f"- Time to peak, s: {q([d['time_to_max_mcap_s'] for _, d in std])}\n")
+        p(f"- Time to peak, s: {q([d['time_to_max_mcap_s'] for _, d in std])}")
+        late = lambda d, ks: sum(d[f"noncreator_buy_quote_{k}"] for k in ks)  # noqa: E731
+        p(f"- Any non-creator buying after 2 min: {wilson(sum(late(d, ['120_600s', '600_3600s', '3600_ends']) > 0 for _, d in std), m)}; "
+          f"after 10 min: {wilson(sum(late(d, ['600_3600s', '3600_ends']) > 0 for _, d in std), m)}; "
+          f"after 1 h: {wilson(sum(late(d, ['3600_ends']) > 0 for _, d in std), m)}")
+        back = [d for _, d in std if d["final_mcap"] and d["start_mcap"]]
+        p(f"- Final market cap within 5 % of the start (round-tripped): {wilson(sum(d['final_mcap'] <= 1.05 * d['start_mcap'] for d in back), len(back))}")
+        full = sum(1 for _, d in std if d["n_trades"] and d["max_mcap"] and d["max_mcap"] >= 2 * d["start_mcap"] and d["final_mcap"] <= 1.05 * d["start_mcap"])
+        p(f"- Reached ≥ 2× start and then fell back to within 5 % of the start: {wilson(full, m)}\n")
         grad = [(r, d) for r, d in std if d["completed"]]
         for r, d in grad:
             p(f"- Graduated: `{r['mint']}`: creator paid {d['creator_quote_paid'] / L:.2f} SOL in the creation tx and bought "
@@ -122,6 +134,10 @@ def main() -> None:
         p(f"- Initial buy in creation tx, SOL: {q(ib)}; no initial buy: {sum(x == 0 for x in ib)}")
         sold = [d for _, d in std if d["creator_tokens_sold"]]
         p(f"- Creator sold within horizon: {wilson(len(sold), m)}; first sell, s: {q([d['creator_first_sell_s'] for d in sold])}")
+        buyers_ = [d for _, d in std if d["creator_tokens_bought"]]
+        quick = sum(1 for d in buyers_ if d["creator_curve_net_tokens"] == 0 and d["creator_first_sell_s"] is not None
+                    and d["creator_first_sell_s"] <= 60)
+        p(f"- Creators who bought and had fully sold their curve position, first sale within 60 s: {wilson(quick, len(buyers_))}")
         p(f"- Creator net cash (received − paid), SOL: {q([d['creator_net_cash'] / L for _, d in std])}")
         p(f"- Realised P&L (avg cost), SOL: {q([d['creator_realised_pnl_avg_cost'] / L for _, d in std])}")
         unr = [d["creator_unrealised_pnl_mark_to_curve"] for _, d in std if d["creator_unrealised_pnl_mark_to_curve"] is not None]
@@ -138,6 +154,10 @@ def main() -> None:
         p(f"- Creator address's curve balance exceeds all tokens outstanding (so tokens were transferred to other "
           f"wallets): {wilson(len(moved), m)}" + ("; " + ", ".join(f"`{r['mint'][:8]}…` ≥ {d['creator_tokens_moved_off_min'] / 1e12:,.1f} M tokens"
                                                      for r, d in moved) if moved else ""))
+        tin = [(r, d) for r, d in std if d.get("creator_tokens_sold_not_bought_on_curve")]
+        p(f"- Creator address sold tokens it never bought on the curve (received by transfer): {wilson(len(tin), m)}; "
+          f"proceeds from those tokens, SOL: {q([d['creator_proceeds_from_tokens_not_bought_on_curve'] / L for _, d in tin])} "
+          "(excluded from realised P&L)")
         p(f"- Accrued creator fees, SOL: {q([d['creator_fee_accrued'] / L for _, d in std])} (accrued, not necessarily claimed)")
     text = "\n".join(out) + "\n"
     if a.out:

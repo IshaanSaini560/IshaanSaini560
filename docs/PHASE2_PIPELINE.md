@@ -1,8 +1,7 @@
 # Phase 2: historical launch-data pipeline
 
-Status: **built and trial-tested with free, keyless sources (PublicNode, public mainnet RPC).
-Collection beyond the last ~3 days, and at the 500–1,000-launch scale, is waiting for a Helius
-API key** (environment variable `HELIUS_API_KEY`).
+Status: **complete for the first dataset.** 997 launches were collected through Helius (§10),
+after trials on free sources (§7–8b).
 
 The pipeline is read-only. It never holds keys, signs, or sends transactions. All stored chain
 data is decoded from mainnet transactions (VERIFIED). Derived columns are labelled as such.
@@ -212,6 +211,93 @@ It is a small sample with wide confidence intervals, not an estimate for Pump.fu
 
 A truncated launch (`FYJnGwFN…`: 767 buyers, peak 393.6 SOL) hit the 5,000-transaction cap
 inside the hour. It is flagged; Helius with a higher cap is needed to see it whole.
+
+## 10. Main dataset: 997 launches via Helius (2026-10-31)
+
+Command: `frame --random-windows 30 --days 14 --minutes 10 --seed 2026 --horizon 21600`, then
+`sample --n 1000 --seed 2026`, then `collect --max-tx 15000`.
+
+* **Cost:** ~69,800 estimated Helius credits in total, about 7% of the free monthly allowance.
+  That includes ~2,000 credits to re-collect 38 launches after the fix below.
+* **Report:** [`generated/helius_1000.md`](generated/helius_1000.md).
+* **Committed data** (`data/pipeline/helius_1000_exports/`): launches, per-launch summaries,
+  trades, frame windows, and the full sampling frame with selection flags.
+* **Not committed:** the transaction and failed-attempt tables (56 MB compressed). They can be
+  re-collected.
+
+**Integrity**
+
+* The Helius history for a trial launch matched the PublicNode collection exactly: same 139
+  signatures, in-block indices and failure flags.
+* **26,555 of 26,555** replay-checked trades on standard coins match the simulator to the
+  lamport. 2 v3 buys that crossed graduation (synthetic migration) are outside the model and
+  recorded as not checked.
+* 3 of 1,000 sampled frame transactions were PumpSwap pool creations, not coin creations. They
+  are flagged, so the sample remains a random sample of real creations.
+
+**Bugs found by this run, fixed, with regression tests**
+
+* **Shared transactions overwrote rows.** Multi-coin bot transactions (one transaction trading
+  up to 10 coins) can touch two sampled launches. Under the old schema, which was keyed by
+  signature, the second launch overwrote the first one's rows. 38 launches had lost 41
+  transaction rows and 8 trade rows. Tables are now keyed by (mint, signature), the database was
+  migrated, and the 38 launches were re-collected. All row counts now reconcile.
+* **Transferred-in tokens were booked as profit.** When a creator address sold tokens it never
+  bought on the curve, the summary counted the proceeds as zero-cost realised profit. This
+  inflated the largest creator "profit" from 7.7 to 38.6 SOL. Those proceeds are now reported
+  separately and never counted as profit.
+
+**Results** (VERIFIED on-chain data; 30 random 10-minute windows, 17–31 Oct 2026; 6-hour horizon)
+
+| | |
+|---|---|
+| Creation rate | ~1,740 coins per hour; 6% of creation transactions failed |
+| Coin types | 29% mayhem (26–32%), 29% non-SOL quote (61 quote mints; PUMP most common, USDC 14 coins), **430 standard** |
+| Transactions touching curves | 80% failed. 94% of failures never reached Pump (bot guard and router programs) |
+
+**Standard launches (n = 430)**
+
+| Measure | Result |
+|---|---|
+| Any non-creator buyer | 69% (64–73%) |
+| ≥ 5 non-creator buyers | 43% |
+| ≥ 20 non-creator buyers | 22% |
+| Non-creator buy volume over 6 h | median **0.50 SOL** (IQR 0–10.6) |
+| …of which in the first 30 s | median 0.29 SOL |
+| Peak market cap | median 33.9 SOL (1.2× start) |
+| Time to peak | median **2 s** |
+| Reached 2× start | 19% (15–23%) |
+| Graduated within 6 h | 3% (11 launches; 5 of them were creators buying the whole curve for 86.07 SOL at creation) |
+| Non-creator buying after 2 min / 10 min / 1 h | 33% / 17% / 7% |
+| Ended within 5% of the start market cap | 92% of launches with trades |
+| Reached 2× and then fell back to the start | 14% |
+
+**Creator address only, non-graduated standard launches (n = 419).** Other wallets the creator
+controls are not included.
+
+| Measure | Result |
+|---|---|
+| Sold within 6 h | 74% |
+| Time to first sale | median **19 s** |
+| Bought and fully exited, starting within 60 s | 54% of those who bought |
+| Realised + mark-to-curve P&L | median ≈ 0 SOL; 45% positive (40–50%); range −0.27 to +7.7 SOL |
+| Creator address moved tokens out | 1% |
+| Creator address sold tokens received by transfer | 1%; proceeds median 2.6 SOL, max 35.6 SOL |
+
+These signals are input for wallet-relationship scoring.
+
+**What this does and does not say about the 10 SOL question.** Phase 1 showed that a 10 SOL
+first buyer breaks even only if about 0.58 SOL of independent buying is *still held* when the
+buyer exits. In this sample, the median standard launch received **0.50 SOL of non-creator
+buying in total over 6 hours**. Most of it arrived in the first 30 s, the median peak came 2 s
+after creation, and 92% of launches ended back at their starting market cap. That points
+against a profitable first-buyer strategy for typical launches. It is not yet a backtest:
+
+* "Non-creator" buying includes bots that exit within seconds.
+* A hypothetical 10 SOL position would itself change what later traders do.
+* Creator-controlled wallets are not yet separated from independent buyers.
+
+Phase 3 (an exit-timing backtest with out-of-sample testing) is needed for a verdict.
 
 ## 9. Not yet collected (next steps)
 
