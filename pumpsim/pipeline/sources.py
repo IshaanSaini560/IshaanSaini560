@@ -163,7 +163,7 @@ class HeliusSource(HistorySource):
 
     name = "helius"
 
-    def __init__(self, api_key: str | None = None, min_interval: float = 0.1, full_page: int = 100):
+    def __init__(self, api_key: str | None = None, min_interval: float = 0.1, full_page: int = 1000):
         super().__init__()
         key = api_key or os.environ.get("HELIUS_API_KEY")
         if not key:
