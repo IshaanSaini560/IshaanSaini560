@@ -131,6 +131,15 @@ transaction, so roughly 10× more credits and slower).
 | `--source public` (`api.mainnet-beta.solana.com`) | Per-method limit of about 10 calls per window (`x-ratelimit-method-limit: 10`); 429 penalties of 10 s. Paced at ~1 request/s. | Spot checks only |
 | dRPC free plan | Solana is not available on the free plan | — |
 
+**History limits are enforced, not assumed.** PublicNode is load-balanced across backends with
+different retention: one backend's `getFirstAvailableBlock` was already pruned on the next. So
+`history_start()` probes forward until a block time is actually served and adds a 2-hour
+margin. A frame window that starts before that time is stored with `complete = 0`, is never
+sampled, and is never reported as "0 launches". The first free pilot was the first run with
+windows that far back: 3 of its 8 random windows (29 Oct, 16:39–20:09 UTC) fell outside
+PublicNode's history, came back empty, and are now flagged. Correctly-flagged runs need the
+archival Helius source for anything older than ~2.5 days.
+
 The pipeline is paced at ≤ 10 requests/s with 4 workers on PublicNode, to be a polite user of a
 free service. Anything older than ~3 days, and anything at the 500–1,000-launch scale, needs
 Helius (or another archival provider).

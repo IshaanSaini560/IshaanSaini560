@@ -173,3 +173,26 @@ def test_rpc_source_signature_cache_and_order():
     c = src.signatures("addr", 4500, 4600)  # served from cache
     assert [r.signature for r in c] == [r.signature for r in a]
     assert calls == [None, "s999"]
+
+
+def test_windows_outside_source_history_are_skipped_not_zero(tmp_path):
+    from pumpsim.pipeline.collect import enumerate_frame
+    from pumpsim.pipeline.sources import HistorySource, SigRef
+
+    class Src(HistorySource):
+        name = "fake"
+
+        def history_start(self):
+            return 10_000
+
+        def signatures(self, address, t_start, t_end):
+            return [SigRef(f"s{t}", t, t, False, 0, i) for i, t in enumerate(range(t_start, t_end, 100))]
+
+    con = db.connect(str(tmp_path / "t.sqlite"))
+    src = Src()
+    old = enumerate_frame(con, src, 1_000, 2_000)  # before the source's history
+    new = enumerate_frame(con, src, 20_000, 21_000)
+    rows = {r["window_id"]: r for r in con.execute("SELECT * FROM frame_windows")}
+    assert rows[old]["complete"] == 0 and rows[old]["n_signatures"] is None  # unknown, not "0 launches"
+    assert rows[new]["complete"] == 1 and rows[new]["n_success"] == 10
+    assert con.execute("SELECT COUNT(*) FROM frame_creations WHERE window_id=?", (old,)).fetchone()[0] == 0

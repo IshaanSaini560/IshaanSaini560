@@ -63,6 +63,10 @@ class HistorySource:
     def signatures(self, address: str, t_start: int, t_end: int) -> list[SigRef]:
         raise NotImplementedError
 
+    def history_start(self) -> int:
+        """Earliest unix time this source has complete ledger data for (0 = archival)."""
+        return 0
+
     def full_history(self, address: str, t_start: int, t_end: int, max_tx: int) -> tuple[list[FullTx], bool]:
         """All transactions touching `address` with t_start <= blockTime < t_end, oldest first.
         Returns (transactions, truncated) where truncated means max_tx was hit."""
@@ -82,6 +86,29 @@ class RpcSource(HistorySource):
         self.credits_per_call = credits_per_call
         self.workers = workers
         self._sig_cache: dict[str, dict] = {}  # address -> {"items": newest-first, "before": cursor, "done": bool}
+
+    def history_start(self, margin_s: int = 7200) -> int:
+        """Conservative earliest unix time with complete ledger data on this endpoint.
+
+        Non-archival nodes return nothing before their first block, which would otherwise look like
+        "no launches". Load-balanced endpoints (PublicNode) mix backends with different retention
+        (observed 2026-10-31: getFirstAvailableBlock from one backend was already pruned on the next),
+        so we probe forward from the reported first block until a block time is served, then add a
+        safety margin."""
+        if getattr(self, "_history_start", None) is None:
+            self.usage.add("getFirstAvailableBlock", self.credits_per_call)
+            first = self.rpc.call("getFirstAvailableBlock", [])
+            bt = None
+            for off in range(0, 400_000, 2_500):  # up to ~2 days of slots
+                try:
+                    self.usage.add("getBlockTime", self.credits_per_call)
+                    bt = self.rpc.call("getBlockTime", [first + off])
+                except RpcError:
+                    continue
+                if bt:
+                    break
+            self._history_start = (bt + margin_s) if bt else 0
+        return self._history_start
 
     def _sig_page(self, address: str, before: str | None) -> list[dict]:
         self.usage.add("getSignaturesForAddress", self.credits_per_call)

@@ -61,7 +61,8 @@ def export(con, out: pathlib.Path) -> list[str]:
 
 def status(con) -> None:
     q = lambda sql: con.execute(sql).fetchone()[0]  # noqa: E731
-    print(f"frame windows        {q('SELECT COUNT(*) FROM frame_windows')}")
+    print(f"frame windows        {q('SELECT COUNT(*) FROM frame_windows')} "
+          f"(skipped, outside source history: {q('SELECT COUNT(*) FROM frame_windows WHERE complete=0')})")
     print(f"frame creations      {q('SELECT COUNT(*) FROM frame_creations')} "
           f"(failed {q('SELECT COUNT(*) FROM frame_creations WHERE failed=1')}, selected {q('SELECT COUNT(*) FROM frame_creations WHERE selected=1')})")
     for st, n in con.execute("SELECT status, COUNT(*) FROM launches GROUP BY status"):
@@ -124,8 +125,10 @@ def main() -> None:
         for s, e in windows:
             wid = enumerate_frame(con, src, s, e)
             r = con.execute("SELECT * FROM frame_windows WHERE window_id=?", (wid,)).fetchone()
+            label = (f"creations {r['n_success']} (+{r['n_failed']} failed)" if r["complete"] else
+                     "SKIPPED: before this source's ledger history (not sampled; use an archival source)")
             print(f"window {wid}: {datetime.fromtimestamp(s, timezone.utc):%Y-%m-%d %H:%M}–"
-                  f"{datetime.fromtimestamp(e, timezone.utc):%H:%M} UTC  creations {r['n_success']} (+{r['n_failed']} failed)")
+                  f"{datetime.fromtimestamp(e, timezone.utc):%H:%M} UTC  {label}")
         log_usage(con, "frame", src, f"windows={len(windows)}")
     elif a.cmd == "sample":
         print(f"added {sample_launches(con, src, a.n, a.seed, a.horizon)} launches")

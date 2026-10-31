@@ -37,6 +37,13 @@ def enumerate_frame(con: sqlite3.Connection, src: HistorySource, t_start: int, t
     row = con.execute("SELECT window_id FROM frame_windows WHERE t_start=? AND t_end=?", (t_start, t_end)).fetchone()
     if row:
         return row["window_id"]
+    hs = src.history_start()
+    if t_start < hs + 60:
+        # The source has no (or partial) ledger data here: recording "0 creations" would be false.
+        cur = con.execute("INSERT INTO frame_windows (t_start, t_end, source, enumerated_at, complete)"
+                          " VALUES (?,?,?,?,0)", (t_start, t_end, src.name, _now()))
+        con.commit()
+        return cur.lastrowid
     refs = src.signatures(MINT_AUTHORITY, t_start, t_end)
     cur = con.execute(
         "INSERT INTO frame_windows (t_start, t_end, source, n_signatures, n_failed, n_success, enumerated_at)"
@@ -77,8 +84,8 @@ def sample_launches(con: sqlite3.Connection, src: HistorySource, n: int, seed: i
     Decodes each selected creation and inserts a pending launch row. Returns rows added."""
     cutoff = int(time.time()) - horizon_s - 60
     pool = [r["signature"] for r in con.execute(
-        "SELECT signature FROM frame_creations WHERE failed=0 AND selected=0 AND block_time <= ? ORDER BY signature",
-        (cutoff,))]
+        "SELECT signature FROM frame_creations WHERE failed=0 AND selected=0 AND block_time <= ? AND window_id IN "
+        "(SELECT window_id FROM frame_windows WHERE complete=1) ORDER BY signature", (cutoff,))]
     rng = random.Random(seed)
     chosen = rng.sample(pool, min(n, len(pool)))
     refs = {r["signature"]: r for r in con.execute(

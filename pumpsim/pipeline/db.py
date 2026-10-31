@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS frame_windows (
     window_id INTEGER PRIMARY KEY,
     t_start INTEGER NOT NULL, t_end INTEGER NOT NULL,      -- unix seconds, [t_start, t_end)
     source TEXT, n_signatures INTEGER, n_failed INTEGER, n_success INTEGER, enumerated_at TEXT,
+    complete INTEGER DEFAULT 1,  -- 0 = window not fully covered by the source's ledger history; never sample it
     UNIQUE (t_start, t_end)
 );
 CREATE TABLE IF NOT EXISTS frame_creations (
@@ -92,6 +93,8 @@ def connect(path: str) -> sqlite3.Connection:
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA foreign_keys=ON")
     con.executescript(SCHEMA)
+    if "complete" not in {r[1] for r in con.execute("PRAGMA table_info(frame_windows)")}:
+        con.execute("ALTER TABLE frame_windows ADD COLUMN complete INTEGER DEFAULT 1")
     cols = {r[1] for r in con.execute("PRAGMA table_info(trades)")}
     if "event_ix_name" not in cols:  # databases created before this column existed
         con.execute("ALTER TABLE trades ADD COLUMN event_ix_name TEXT")
