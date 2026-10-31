@@ -1,0 +1,504 @@
+{
+  "generated_at_utc": "2026-10-31T13:39:58+00:00",
+  "rpc": "https://api.mainnet-beta.solana.com",
+  "signature_window_unix": [
+    1793453750,
+    1793453765
+  ],
+  "signatures_scanned": 1000,
+  "signatures_failed": 334,
+  "transactions_fetched": 400,
+  "skipped": {
+    "ix_event_count_mismatch(multi-hop/CPI variants)": 4,
+    "no_trade_event": 17
+  },
+  "trades_checked": 431,
+  "trades_all_match": 317,
+  "by_instruction": {
+    "buy": {
+      "n": 89,
+      "all_match": 35
+    },
+    "buy_exact_quote_in_v2": {
+      "n": 40,
+      "all_match": 40
+    },
+    "buy_exact_quote_in_v3": {
+      "n": 54,
+      "all_match": 54
+    },
+    "buy_exact_sol_in": {
+      "n": 5,
+      "all_match": 5
+    },
+    "buy_v2": {
+      "n": 1,
+      "all_match": 1
+    },
+    "buy_v3": {
+      "n": 7,
+      "all_match": 7
+    },
+    "sell": {
+      "n": 140,
+      "all_match": 80
+    },
+    "sell_v2": {
+      "n": 33,
+      "all_match": 33
+    },
+    "sell_v3": {
+      "n": 62,
+      "all_match": 62
+    }
+  },
+  "sol_paired_non_mayhem": {
+    "n": 256,
+    "all_match": 256,
+    "fee_schedule_matches_verified": 256
+  },
+  "mayhem": {
+    "n": 167,
+    "all_match": 53
+  },
+  "exact_in_hypotheses": {
+    "tokens_v3_formula": 99,
+    "tokens_legacy_formula": 73,
+    "charged_exact_out_price": 0,
+    "charged_full_net": 99,
+    "n": 99
+  },
+  "exact_in_budget_unspent_lamports": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "buyback": {
+    "n": 264,
+    "floor_half": 264,
+    "ceil_half": 126
+  },
+  "errors": [],
+  "mismatch_categories": {
+    "mayhem=True zero_fee=True": 114,
+    "mayhem=True zero_fee=False": 0,
+    "mayhem=False zero_fee=True": 0,
+    "mayhem=False zero_fee=False": 0
+  },
+  "mismatches": [
+    {
+      "ix": "buy",
+      "is_buy": true,
+      "mayhem": true,
+      "sol_quote": true,
+      "fee_bps": 0,
+      "creator_bps": 0,
+      "match": {
+        "tokens": true,
+        "quote_curve": false,
+        "protocol_fee": true,
+        "creator_fee": true,
+        "post_virtual_reserves": false
+      },
+      "all_match": false,
+      "schedule_matches_verified": false,
+      "signature": "631u7MfhqjQoWR1HZ8qBTMD4zZEEpF8QGhQVZCPZGBXZnr7q26c5HzWpZ7aACtBmizgCLpHVdXn3NfjCqeaorry5"
+    },
+    {
+      "ix": "buy",
+      "is_buy": true,
+      "mayhem": true,
+      "sol_quote": true,
+      "fee_bps": 0,
+      "creator_bps": 0,
+      "match": {
+        "tokens": true,
+        "quote_curve": false,
+        "protocol_fee": true,
+        "creator_fee": true,
+        "post_virtual_reserves": false
+      },
+      "all_match": false,
+      "schedule_matches_verified": false,
+      "signature": "4miBJdzyeBYdr1zzz6msueGfQdEA61hJKiMwufGGP6YiScGV9yJVE7zWim12jeei4xwTcJSGvwH9t8Ss7uQNPuRf"
+    },
+    {
+      "ix": "buy",
+      "is_buy": true,
+      "mayhem": true,
+      "sol_quote": true,
+      "fee_bps": 0,
+      "creator_bps": 0,
+      "match": {
+        "tokens": true,
+        "quote_curve": false,
+        "protocol_fee": true,
+        "creator_fee": true,
+        "post_virtual_reserves": false
+      },
+      "all_match": false,
+      "schedule_matches_verified": false,
+      "signature": "5CgYcLWEQwuUEYUWufKMLJ7eFCraffzArWingeXw7D6Piwvrg15T76U2se8xCJZDxbcDeLb821yu6mcw3cziehpC"
+    },
+    {
+      "ix": "sell",
+      "is_buy": false,
+      "mayhem": true,
+      "sol_quote": true,
+      "fee_bps": 0,
+      "creator_bps": 0,
+      "match": {
+        "tokens": true,
+        "quote_curve": false,
+        "protocol_fee": true,
+        "creator_fee": true,
+        "post_virtual_reserves": false
+      },
+      "all_match": false,
+      "schedule_matches_verified": false,
+      "signature": "2qp2ZBQLNsvsMLim2YEGuNnvko1rZ93QiAtne9iyLjByj8oRGnMQk42E3wYjfKShMUnEXGTrTDUipLTq5VfQXtcN"
+    },
+    {
+      "ix": "sell",
+      "is_buy": false,
+      "mayhem": true,
+      "sol_quote": true,
+      "fee_bps": 0,
+      "creator_bps": 0,
+      "match": {
+        "tokens": true,
+        "quote_curve": false,
+        "protocol_fee": true,
+        "creator_fee": true,
+        "post_virtual_reserves": false
+      },
+      "all_match": false,
+      "schedule_matches_verified": false,
+      "signature": "aZhKgLQo54bw3C4WdWAtpzktmNJQzvsrnq64Vpn4LocsNWVvLkDE2Fed485n1xWH4iEdVMCdzemnyES2kUCRbtc"
+    },
+    {
+      "ix": "buy",
+      "is_buy": true,
+      "mayhem": true,
+      "sol_quote": true,
+      "fee_bps": 0,
+      "creator_bps": 0,
+      "match": {
+        "tokens": true,
+        "quote_curve": false,
+        "protocol_fee": true,
+        "creator_fee": true,
+        "post_virtual_reserves": false
+      },
+      "all_match": false,
+      "schedule_matches_verified": false,
+      "signature": "2KViaAALFkGZYoVgFAzwq1FR9MgfbdmXaPSARkbc7EeaaQVqarsPF9Cgzktc9aArufyhvFN3jc2YoaoqumbqZDEf"
+    },
+    {
+      "ix": "buy",
+      "is_buy": true,
+      "mayhem": true,
+      "sol_quote": true,
+      "fee_bps": 0,
+      "creator_bps": 0,
+      "match": {
+        "tokens": true,
+        "quote_curve": false,
+        "protocol_fee": true,
+        "creator_fee": true,
+        "post_virtual_reserves": false
+      },
+      "all_match": false,
+      "schedule_matches_verified": false,
+      "signature": "5Poxgi6rPK1vkTSQ8qB1zaQqfUvKrQ7uF4JYMo3oW4sJRhF8NZmDC8UXYpZDnM2nLiFD7quoAVGuEbG8FNczZgbk"
+    },
+    {
+      "ix": "buy",
+      "is_buy": true,
+      "mayhem": true,
+      "sol_quote": true,
+      "fee_bps": 0,
+      "creator_bps": 0,
+      "match": {
+        "tokens": true,
+        "quote_curve": false,
+        "protocol_fee": true,
+        "creator_fee": true,
+        "post_virtual_reserves": false
+      },
+      "all_match": false,
+      "schedule_matches_verified": false,
+      "signature": "2Ux7NHH4ZufnJfBe2FrRaaa8QvQ8yACZTBgDZ8MnNzdZeJdNsK4FC4Ds1iAXRLVuUPdXdKiC67mtomrLfBEt9cJu"
+    },
+    {
+      "ix": "sell",
+      "is_buy": false,
+      "mayhem": true,
+      "sol_quote": true,
+      "fee_bps": 0,
+      "creator_bps": 0,
+      "match": {
+        "tokens": true,
+        "quote_curve": false,
+        "protocol_fee": true,
+        "creator_fee": true,
+        "post_virtual_reserves": false
+      },
+      "all_match": false,
+      "schedule_matches_verified": false,
+      "signature": "3D8fGmibLpvLSjiJGYV8iz9MU8trHf9uPR96T3NJJ7sbfPRK8ebkZgv5RuDHbLj1m4N6hnD3nYJsoKsh1ShFfLi1"
+    },
+    {
+      "ix": "sell",
+      "is_buy": false,
+      "mayhem": true,
+      "sol_quote": true,
+      "fee_bps": 0,
+      "creator_bps": 0,
+      "match": {
+        "tokens": true,
+        "quote_curve": false,
+        "protocol_fee": true,
+        "creator_fee": true,
+        "post_virtual_reserves": false
+      },
+      "all_match": false,
+      "schedule_matches_verified": false,
+      "signature": "3rxAWhj4k4pfz9kb5BwUuC5UQgZregYsJ81DoouUn18NTjYuCjnRvdQ4eAkyCMK8LNQbYuYPDQQbYcTgqAdWsSvU"
+    },
+    {
+      "ix": "buy",
+      "is_buy": true,
+      "mayhem": true,
+      "sol_quote": true,
+      "fee_bps": 0,
+      "creator_bps": 0,
+      "match": {
+        "tokens": true,
+        "quote_curve": false,
+        "protocol_fee": true,
+        "creator_fee": true,
+        "post_virtual_reserves": false
+      },
+      "all_match": false,
+      "schedule_matches_verified": false,
+      "signature": "3x51J4AVuTvNx4xKeTjvSxFsspd6yyFfJUgoMWdCBU3UJbKstMf22EG2up42nsnWSfAP42uuKCBrTi2oyGvqiprC"
+    },
+    {
+      "ix": "sell",
+      "is_buy": false,
+      "mayhem": true,
+      "sol_quote": true,
+      "fee_bps": 0,
+      "creator_bps": 0,
+      "match": {
+        "tokens": true,
+        "quote_curve": false,
+        "protocol_fee": true,
+        "creator_fee": true,
+        "post_virtual_reserves": false
+      },
+      "all_match": false,
+      "schedule_matches_verified": false,
+      "signature": "hiadpr4NuiZYsh31Bdw6X2Dx1spD55f7Ay8NBbfpyCz4xFBr281z1DDunmryJ3jA4LR48WjpXjgnyk6tCJJRSkH"
+    },
+    {
+      "ix": "buy",
+      "is_buy": true,
+      "mayhem": true,
+      "sol_quote": true,
+      "fee_bps": 0,
+      "creator_bps": 0,
+      "match": {
+        "tokens": true,
+        "quote_curve": false,
+        "protocol_fee": true,
+        "creator_fee": true,
+        "post_virtual_reserves": false
+      },
+      "all_match": false,
+      "schedule_matches_verified": false,
+      "signature": "3rPW9s4nogwdgpbtdHquh8isnsRQQQuPGkGnGHRDTcbekgLFCCCj9fTQjwTx8x8j8yfdh8fimTn7JGRH58y1bFuu"
+    },
+    {
+      "ix": "buy",
+      "is_buy": true,
+      "mayhem": true,
+      "sol_quote": true,
+      "fee_bps": 0,
+      "creator_bps": 0,
+      "match": {
+        "tokens": true,
+        "quote_curve": false,
+        "protocol_fee": true,
+        "creator_fee": true,
+        "post_virtual_reserves": false
+      },
+      "all_match": false,
+      "schedule_matches_verified": false,
+      "signature": "2LFs5f6ZxPp7yowKvU8VTz8AJjmHnHhm43xmXpWnvPcsFZD1Z8CVWsjNvNitRfts1jaUH7RuQAuyrbScoWpJyC1J"
+    },
+    {
+      "ix": "buy",
+      "is_buy": true,
+      "mayhem": true,
+      "sol_quote": true,
+      "fee_bps": 0,
+      "creator_bps": 0,
+      "match": {
+        "tokens": true,
+        "quote_curve": false,
+        "protocol_fee": true,
+        "creator_fee": true,
+        "post_virtual_reserves": false
+      },
+      "all_match": false,
+      "schedule_matches_verified": false,
+      "signature": "5PugvcT97iFzkXrmxQU4BT4FWGNGCw662c1XTq3nQEbiQsQC3p9TsdppV1vubcpySDtYkn1vhygwmzD5EMF8L5kG"
+    },
+    {
+      "ix": "sell",
+      "is_buy": false,
+      "mayhem": true,
+      "sol_quote": true,
+      "fee_bps": 0,
+      "creator_bps": 0,
+      "match": {
+        "tokens": true,
+        "quote_curve": false,
+        "protocol_fee": true,
+        "creator_fee": true,
+        "post_virtual_reserves": false
+      },
+      "all_match": false,
+      "schedule_matches_verified": false,
+      "signature": "3jzHojug8hrQ3ynNmJq35DQ72yeZpkzTvxSArunuuLzmxasiT4r4mPtUsL7EGCwEGtmfX9GuWAkb93x47WtqSGbj"
+    },
+    {
+      "ix": "sell",
+      "is_buy": false,
+      "mayhem": true,
+      "sol_quote": true,
+      "fee_bps": 0,
+      "creator_bps": 0,
+      "match": {
+        "tokens": true,
+        "quote_curve": false,
+        "protocol_fee": true,
+        "creator_fee": true,
+        "post_virtual_reserves": false
+      },
+      "all_match": false,
+      "schedule_matches_verified": false,
+      "signature": "3PgrK7cNdYF3kJiw6EQPzcHu4RRPRAA2yQyhdBpKwFLJ2intQB5zkG7rX5HrMpQKccsbpkxT7tRYwSjethEKmUaX"
+    },
+    {
+      "ix": "buy",
+      "is_buy": true,
+      "mayhem": true,
+      "sol_quote": true,
+      "fee_bps": 0,
+      "creator_bps": 0,
+      "match": {
+        "tokens": true,
+        "quote_curve": false,
+        "protocol_fee": true,
+        "creator_fee": true,
+        "post_virtual_reserves": false
+      },
+      "all_match": false,
+      "schedule_matches_verified": false,
+      "signature": "4qBybhi2wSZcQikbkT1rJEmwsTGNiCAPuwfE51i2FcTJ81fzFQinPEh8ber29uwT49tgLuE41LL3U7MrKr5vWUMN"
+    },
+    {
+      "ix": "buy",
+      "is_buy": true,
+      "mayhem": true,
+      "sol_quote": true,
+      "fee_bps": 0,
+      "creator_bps": 0,
+      "match": {
+        "tokens": true,
+        "quote_curve": false,
+        "protocol_fee": true,
+        "creator_fee": true,
+        "post_virtual_reserves": false
+      },
+      "all_match": false,
+      "schedule_matches_verified": false,
+      "signature": "2GEvW5sUHDSmwtb3zAv4woavJNC7Rgg1vqaYrc3FrTQXF9hxf4MjVGeMAsqcQGbn1psTKZZWKHeFWNdVjaTpbk2A"
+    },
+    {
+      "ix": "sell",
+      "is_buy": false,
+      "mayhem": true,
+      "sol_quote": true,
+      "fee_bps": 0,
+      "creator_bps": 0,
+      "match": {
+        "tokens": true,
+        "quote_curve": false,
+        "protocol_fee": true,
+        "creator_fee": true,
+        "post_virtual_reserves": false
+      },
+      "all_match": false,
+      "schedule_matches_verified": false,
+      "signature": "RrG1L3DA8Wd6hwujosyhywpy3naCBz5cKydGE9ewy4SMmmcafmQ5xTaWRkF6oCw7y1CaLVhq3HiXY9Wj1Ly8Efc"
+    }
+  ],
+  "execution_costs_sample": {
+    "n_tx": 379,
+    "network_fee_lamports_median": 22452,
+    "network_fee_lamports_p90": 327097,
+    "share_with_jito_tip": 0.07651715039577836,
+    "jito_tip_lamports_median_when_present": 1000
+  }
+}
