@@ -29,6 +29,20 @@ python -m scripts.validate_against_chain --tx 400      # re-validate against fre
 python -m scripts.replay_launch --auto                 # replay one recent launch end-to-end
 ```
 
+## Phase 2 (in progress): historical launch-data pipeline
+
+Design, sampling method, cost estimate and trial results are in
+[`docs/PHASE2_PIPELINE.md`](docs/PHASE2_PIPELINE.md). Large runs need `HELIUS_API_KEY` set in
+the environment settings; never paste the key into code or chat.
+
+```
+python -m pumpsim.pipeline frame   --random-windows 24 --days 14 --minutes 10 --seed 1 --horizon 21600
+python -m pumpsim.pipeline sample  --n 1000 --seed 1 --horizon 21600
+python -m pumpsim.pipeline collect --limit 1000 --max-credits 200000
+python -m pumpsim.pipeline summarize && python -m pumpsim.pipeline export
+python -m pumpsim.pipeline status
+```
+
 Set `SOLANA_RPC_URL` to use your own RPC. The public endpoint works, but it is rate-limited.
 
 Requirements: Python ≥ 3.10. Only the standard library is used, plus `pytest` for the tests.

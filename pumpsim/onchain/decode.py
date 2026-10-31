@@ -14,7 +14,7 @@ def decode_account(kind: str, data: bytes) -> dict:
 
 def decode_event_payload(payload: bytes) -> tuple[str, dict] | None:
     """payload = 8-byte event discriminator + borsh body."""
-    for name in ("TradeEvent", "CreateEvent", "CompleteEvent", "PostCompleteBuyEvent"):
+    for name in ("TradeEvent", "CreateEvent", "CompleteEvent", "PostCompleteBuyEvent", "CompletePumpAmmMigrationEvent"):
         if payload[:8] == DISCRIMINATORS[name]:
             return name, decode_struct(payload, TYPES[name], TYPES, discriminator=DISCRIMINATORS[name])
     return None
@@ -55,13 +55,19 @@ def events_from_transaction(tx: dict) -> list[tuple[str, dict]]:
 
 
 def decode_instruction(data: bytes) -> tuple[str, dict] | None:
-    """Decode a Pump trade/create instruction (trailing optional args are EOF-tolerant)."""
-    from .layouts import INSTRUCTIONS
+    """Decode a Pump instruction. Trade/create instructions get their arguments decoded
+    (trailing optional args are EOF-tolerant); any other Pump instruction is returned by name
+    with empty args."""
+    from .layouts import INSTRUCTION_NAMES, INSTRUCTIONS
 
     for name, (disc, args) in INSTRUCTIONS.items():
         if data[:8] == disc:
-            return name, decode_struct(data[8:], args, TYPES, allow_truncated=True)
-    return None
+            try:
+                return name, decode_struct(data[8:], args, TYPES, allow_truncated=True)
+            except Exception:
+                return name, {}
+    name = INSTRUCTION_NAMES.get(bytes(data[:8]))
+    return (name, {}) if name else None
 
 
 def pump_instructions(tx: dict) -> list[tuple[str, dict, list[str]]]:
@@ -91,3 +97,56 @@ def pump_instructions(tx: dict) -> list[tuple[str, dict, list[str]]]:
         for sub in inner.get(idx, []):
             visit(sub)
     return out
+
+
+def failure_info(logs: list[str] | None) -> dict:
+    """Which program failed a transaction and why, from the log invocation stack.
+
+    Returns {"program": id or None, "code": int or None, "name": str or None,
+    "pump_reached": bool}. "name" uses the Pump IDL for Pump errors and the AnchorError
+    "Error Code" for other Anchor programs. A failure in another program (bot guard,
+    router, aggregator) is common and is NOT a Pump slippage failure.
+    """
+    import re
+
+    from .layouts import ERRORS
+
+    stack: list[str] = []
+    last_anchor: dict[str, tuple[str, int]] = {}
+    out = {"program": None, "code": None, "name": None, "pump_reached": False}
+    for line in logs or []:
+        m = re.match(r"Program (\w+) invoke \[\d+\]", line)
+        if m:
+            stack.append(m.group(1))
+            if m.group(1) == PUMP_PROGRAM_ID:
+                out["pump_reached"] = True
+            continue
+        m = re.match(r"Program (\w+) success", line)
+        if m:
+            if stack:
+                stack.pop()
+            continue
+        m = re.search(r"AnchorError.*Error Code: (\w+)\. Error Number: (\d+)", line)
+        if m and stack:
+            last_anchor[stack[-1]] = (m.group(1), int(m.group(2)))
+            continue
+        m = re.match(r"Program (\w+) failed: (.*)", line)
+        if m and out["program"] is None:
+            prog, msg = m.group(1), m.group(2)
+            out["program"] = prog
+            c = re.search(r"custom program error: 0x([0-9a-fA-F]+)", msg)
+            if c:
+                out["code"] = int(c.group(1), 16)
+            if prog == PUMP_PROGRAM_ID and out["code"] is not None:
+                out["name"] = ERRORS.get(out["code"], f"custom:{out['code']}")
+            elif prog in last_anchor:
+                out["name"] = last_anchor[prog][0]
+            else:
+                out["name"] = msg[:80]
+    return out
+
+
+def pump_error_from_logs(logs: list[str] | None) -> str | None:
+    """Name of the Pump program error that failed a transaction, or None if Pump did not fail."""
+    info = failure_info(logs)
+    return info["name"] if info["program"] == PUMP_PROGRAM_ID else None
